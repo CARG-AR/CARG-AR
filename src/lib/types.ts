@@ -28,6 +28,7 @@ export interface Vehicle {
   vtv_expiry: string | null;
   permit: string;
   license: string;
+  license_expiry: string | null;
   photos: string[];
 }
 
