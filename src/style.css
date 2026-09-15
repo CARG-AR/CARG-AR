@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: #1f2937;
+  background: #f6f8fb;
+  -webkit-font-smoothing: antialiased;
+}
+
+.leaflet-container { border-radius: 0.75rem; z-index: 0; }
