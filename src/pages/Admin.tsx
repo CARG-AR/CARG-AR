@@ -3,7 +3,7 @@ import { getAdminMetrics, getCarrierQueue, getDisputes, getLoadRules, saveLoadRu
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/useAuth';
 import { Alert } from '../components/ui';
-import { LOAD_GROUP_LABELS, type Dispute, type LoadGroup, type LoadRule } from '../lib/types';
+import { LOAD_GROUP_LABELS, VEHICLE_TYPES, expiryBadge, formatDate, type Dispute, type LoadGroup, type LoadRule, type Vehicle } from '../lib/types';
 
 export default function Admin() {
   const { userId, profile, signIn } = useAuth();
@@ -123,16 +123,59 @@ export default function Admin() {
 
       <section className="bg-white rounded-xl border p-5">
         <h2 className="font-semibold mb-3">Verificación de transportistas</h2>
-        <div className="space-y-2">
+        <div className="space-y-4">
           {queue.map((c) => (
-            <div key={c.user_id} className="flex flex-wrap items-center gap-3 border rounded-lg p-3 text-sm">
-              <div className="flex-1">
-                <b>{c.profile?.full_name}</b> · {c.rubro} ·
-                <span className={`ml-2 font-semibold ${c.status === 'verified' ? 'text-green-700' : 'text-amber-600'}`}>{c.status}</span>
-                <span className={`ml-2 ${c.mp_connected ? 'text-green-700' : 'text-gray-400'}`}>MP: {c.mp_connected ? '✓' : '—'}</span>
+            <div key={c.user_id} className="border rounded-xl p-4 text-sm">
+              <div className="flex flex-wrap items-start gap-3 mb-3">
+                <div className="flex-1">
+                  <div className="font-semibold text-base">{c.profile?.full_name || 'Sin nombre'}</div>
+                  <div className="text-gray-500">
+                    @{c.profile?.username || '—'} · {c.profile?.phone || 'Sin teléfono'} · DNI {c.profile?.dni || '—'}
+                  </div>
+                  <div className="text-gray-500">
+                    Rubro: <b>{c.rubro}</b> · MercadoPago: {c.mp_connected ? <span className="text-green-700 font-semibold">Conectado ✓</span> : <span className="text-gray-400">Pendiente</span>}
+                  </div>
+                </div>
+                <span className={`text-sm font-semibold px-3 py-1 rounded-full ${c.status === 'verified' ? 'bg-green-100 text-green-700' : c.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {c.status}
+                </span>
               </div>
-              <button onClick={() => verify(c.user_id, 'verified')} className="bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg">Verificar</button>
-              <button onClick={() => verify(c.user_id, 'rejected')} className="bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg">Rechazar</button>
+
+              <div className="bg-gray-50 rounded-lg p-3 mb-3">
+                <h3 className="font-semibold text-xs uppercase text-gray-500 mb-2">Vehículos vinculados ({c.vehicles?.length || 0})</h3>
+                <div className="space-y-3">
+                  {c.vehicles?.map((veh: Vehicle) => {
+                    const seguroBadge = expiryBadge(veh.insurance_expiry);
+                    const vtvBadge = expiryBadge(veh.vtv_expiry);
+                    const carnetBadge = expiryBadge(veh.license_expiry);
+                    return (
+                      <div key={veh.id} className="border rounded-lg p-3 bg-white">
+                        <div className="grid sm:grid-cols-2 gap-2">
+                          <div><span className="text-gray-500">Tipo:</span> {VEHICLE_TYPES[veh.type] || veh.type}</div>
+                          <div><span className="text-gray-500">Patente:</span> {veh.plate}</div>
+                          <div><span className="text-gray-500">Seguro:</span> {veh.insurance || '—'} {seguroBadge && <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${seguroBadge.cls}`}>{seguroBadge.label}</span>}</div>
+                          <div><span className="text-gray-500">VTV:</span> {formatDate(veh.vtv_expiry)} {vtvBadge && <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${vtvBadge.cls}`}>{vtvBadge.label}</span>}</div>
+                          <div><span className="text-gray-500">Carnet:</span> {formatDate(veh.license_expiry)} {carnetBadge && <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${carnetBadge.cls}`}>{carnetBadge.label}</span>}</div>
+                        </div>
+                        {veh.photos?.length > 0 && (
+                          <div className="flex gap-2 mt-2">
+                            {veh.photos.map((url: string, idx: number) => (
+                              <a key={idx} href={url} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline">Ver foto {idx + 1}</a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {(!c.vehicles || c.vehicles.length === 0) && <p className="text-gray-500">Sin vehículos cargados.</p>}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => verify(c.user_id, 'verified')} className="bg-green-600 hover:bg-green-700 text-white text-xs font-semibold px-4 py-2 rounded-lg">Verificar transportista</button>
+                <button onClick={() => verify(c.user_id, 'rejected')} className="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-4 py-2 rounded-lg">Rechazar</button>
+                {c.status === 'verified' && <button onClick={() => verify(c.user_id, 'in_review')} className="bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-semibold px-4 py-2 rounded-lg">Volver a revisión</button>}
+              </div>
             </div>
           ))}
           {queue.length === 0 && <p className="text-sm text-gray-500">Sin solicitudes.</p>}

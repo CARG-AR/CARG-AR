@@ -257,7 +257,14 @@ export async function getReputation(userId: string): Promise<Reputation | null> 
   return data;
 }
 
-export async function getCarrierQueue(): Promise<(CarrierProfile & { profile: Profile })[]> {
-  const { data } = await supabase.from('carrier_profiles').select('*, profile:profiles!carrier_profiles_user_id_fkey(*)').order('declared_at', { ascending: false });
-  return data || [];
+export async function getCarrierQueue(): Promise<(CarrierProfile & { profile: Profile; vehicles: Vehicle[] })[]> {
+  const { data } = await supabase.from('carrier_profiles').select('*, profile:profiles!carrier_profiles_user_id_fkey(*), vehicles(*)').order('declared_at', { ascending: false });
+  return (data || []).map((row: any) => ({ ...row, vehicles: row.vehicles || [] })) as (CarrierProfile & { profile: Profile; vehicles: Vehicle[] })[];
 }
+
+export async function getCarrierFullProfile(userId: string): Promise<(CarrierProfile & { vehicles: Vehicle[] }) | null> {
+  const { data } = await supabase.from('carrier_profiles').select('*, vehicles(*)').eq('user_id', userId).maybeSingle();
+  if (!data) return null;
+  return { ...data, vehicles: data.vehicles || [] } as (CarrierProfile & { vehicles: Vehicle[] });
+}
+

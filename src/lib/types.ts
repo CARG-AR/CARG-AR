@@ -282,5 +282,34 @@ export function badgeFor(rep?: Reputation | null): { label: string; cls: string 
   return { label: 'Es nuevo', cls: 'bg-gray-100 text-gray-600' };
 }
 
+export function daysUntil(date: string | null): number | null {
+  if (!date) return null;
+  const diff = new Date(date).getTime() - new Date().getTime();
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
+export function expiryBadge(date: string | null): { label: string; cls: string; blocked: boolean } | null {
+  const days = daysUntil(date);
+  if (days === null) return null;
+  if (days < 0) return { label: 'Vencido', cls: 'bg-red-100 text-red-700', blocked: true };
+  if (days <= 15) return { label: `Vence en ${days} días`, cls: 'bg-red-100 text-red-700', blocked: true };
+  if (days <= 30) return { label: `Vence en ${days} días`, cls: 'bg-amber-100 text-amber-700', blocked: false };
+  return { label: `Vence en ${days} días`, cls: 'bg-green-100 text-green-700', blocked: false };
+}
+
+export function anyVehicleBlocked(vehicles: Vehicle[]): boolean {
+  return vehicles.some((veh) =>
+    expiryBadge(veh.insurance_expiry)?.blocked ||
+    expiryBadge(veh.vtv_expiry)?.blocked ||
+    expiryBadge(veh.license_expiry)?.blocked
+  );
+}
+
+export function formatDate(date: string | null): string {
+  if (!date) return '—';
+  return new Date(date).toLocaleDateString('es-AR');
+}
+
 export const money = (n: number) =>
   '$' + Math.round(n).toLocaleString('es-AR');
+
