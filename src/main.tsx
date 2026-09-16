@@ -24,6 +24,7 @@ const router = createBrowserRouter([
       { path: '/flete/:id', element: <ShipmentDetail /> },
       { path: '/mis-fletes', element: <MyShipments /> },
       { path: '/transportista', element: <CarrierOnboarding /> },
+      { path: '/perfil/transportista', element: <CarrierOnboarding /> },
       { path: '/perfil', element: <ProfilePage /> },
       { path: '/admin', element: <Admin /> },
     ],

@@ -63,8 +63,9 @@ export default function CarrierOnboarding() {
       insurance_expiry: v.insurance_expiry || null,
       vtv_expiry: v.vtv_expiry || null,
       license_expiry: v.license_expiry || null,
-      photos: vPhotos,
-    } as any);
+      photos: [vPhotos.carnet, vPhotos.vtv].filter((u): u is string => !!u),
+      permit: '',
+    });
     if (error) return setError(error.message);
     setV({ type: 'utilitario', plate: '', insurance: '', insurance_expiry: '', vtv_expiry: '', license: '', license_expiry: '' });
     setVPhotos({});

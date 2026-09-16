@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createShipment, estimatePrice, getConfig, getProfileByUsername, routeKm, uploadPhoto } from '../lib/db';
-import { FALLBACK_CONFIG, type AppConfig, type Category, type GeoPoint } from '../lib/types';
+import { createShipment, getConfig, getLoadRules, getProfileByUsername, routeKm, uploadPhoto } from '../lib/db';
+import { FALLBACK_CONFIG, FALLBACK_LOAD_RULES, LOAD_GROUP_LABELS, type AppConfig, type Category, type GeoPoint, type LoadGroup, type LoadRule } from '../lib/types';
 import { Field, inputCls, Alert } from '../components/ui';
 import { MapView } from '../components/MapView';
 import { useAuth } from '../lib/useAuth';
 import { fetchProvinces, fetchLocalities, type Province, type Locality } from '../lib/geo';
 
 const CATS = [
-  ['paqueteria', 'Paquetería (sobre/bulto)', '5%'],
-  ['pallets', 'Pallets', '7%'],
-  ['maquinaria', 'Maquinaria y vehículos', '12%'],
+  ['paqueteria', 'Paquetería (sobre/bulto)'],
+  ['pallets', 'Pallets'],
+  ['maquinaria', 'Maquinaria y vehículos'],
 ] as const;
+const GROUPS: LoadGroup[] = ['small', 'medium', 'large'];
 
 interface LocationPick {
   province_id: string;
@@ -31,7 +32,14 @@ export default function NewShipment() {
   const { userId, profile, signIn } = useAuth();
   const nav = useNavigate();
   const [cfg, setCfg] = useState<AppConfig>(FALLBACK_CONFIG);
+  const [rules, setRules] = useState<LoadRule[]>(FALLBACK_LOAD_RULES);
+  const [loadGroup, setLoadGroup] = useState<LoadGroup>('small');
+  const [loadOption, setLoadOption] = useState('sobre');
   const [category, setCategory] = useState<Category>('paqueteria');
+  const [lengthCm, setLengthCm] = useState('');
+  const [widthCm, setWidthCm] = useState('');
+  const [heightCm, setHeightCm] = useState('');
+  const [declaredValue, setDeclaredValue] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [weight, setWeight] = useState('');
@@ -49,12 +57,37 @@ export default function NewShipment() {
   const [receiverId, setReceiverId] = useState('');
   const [receiverError, setReceiverError] = useState('');
 
-  useEffect(() => { getConfig().then(setCfg); fetchProvinces().then(setProvinces); }, []);
+  useEffect(() => {
+    getConfig().then(setCfg);
+    getLoadRules().then(setRules);
+    fetchProvinces().then(setProvinces);
+  }, []);
+
+  const groupRules = rules.filter((rule) => rule.group === loadGroup);
+  const selectedRule = groupRules.find((rule) => rule.code === loadOption) || groupRules[0];
+
+  useEffect(() => {
+    if (selectedRule && selectedRule.code !== loadOption) setLoadOption(selectedRule.code);
+  }, [loadGroup, selectedRule, loadOption]);
+
+  useEffect(() => {
+    if (loadGroup === 'medium') {
+      setLoadOption('pallet');
+      setCategory('pallets');
+      if (!lengthCm) setLengthCm('1200');
+      if (!widthCm) setWidthCm('1000');
+      if (!heightCm) setHeightCm('1000');
+    } else if (loadGroup === 'large') {
+      setLoadOption('manual');
+      setCategory('maquinaria');
+    } else {
+      setCategory('paqueteria');
+    }
+  }, [loadGroup]);
 
   const geoOrigin = useMemo(() => ({ label: `${origin.locality}, ${origin.province}`, lat: origin.lat, lng: origin.lng }), [origin]);
   const geoDest = useMemo(() => ({ label: `${dest.locality}, ${dest.province}`, lat: dest.lat, lng: dest.lng }), [dest]);
   const km = routeKm(geoOrigin, geoDest);
-  const suggested = estimatePrice(km, cfg.categories[category].tariff_per_km);
 
   async function loadLocalities(side: 'origin' | 'dest', provinceName: string) {
     try {
@@ -74,13 +107,7 @@ export default function NewShipment() {
     const l = locs.find((x) => x.name === localityName);
     if (!l) return;
     const setter = side === 'origin' ? setOrigin : setDest;
-    setter((prev) => ({
-      ...prev,
-      locality: l.name,
-      localityId: l.id,
-      lat: l.lat,
-      lng: l.lng,
-    }));
+    setter((prev) => ({ ...prev, locality: l.name, localityId: l.id, lat: l.lat, lng: l.lng }));
   }
 
   function pickMap(lat: number, lng: number) {
@@ -102,7 +129,9 @@ export default function NewShipment() {
     if (!title || !origin.province || !origin.locality || !origin.lat || !dest.province || !dest.locality || !dest.lat || !price) {
       return setError('Completá provincia, localidad, dirección y precio inicial de origen y destino.');
     }
-    if (!receiverAlias.trim()) return setError('Tenés que indicar el alias del usuario que recibe el flete.');
+    if (!receiverAlias.trim()) return setError('Tenés que indicar el alias del usuario que recibe la carga.');
+    if (!selectedRule) return setError('Elegí una opción de carga.');
+    if (selectedRule.requires_declared_value && !declaredValue) return setError('Indicá el valor declarado de la carga.');
     if (receiverAlias.toLowerCase() === profile?.username?.toLowerCase()) return setError('No podés ser vos mismo el receptor.');
     setSaving(true); setError('');
     try {
@@ -116,10 +145,19 @@ export default function NewShipment() {
         dispatcher_id: userId,
         receiver_id: receiver.id,
         category,
+        load_group: loadGroup,
+        load_option: selectedRule.code,
+        pricing_mode: selectedRule.manual ? 'manual' : 'automatic',
         title,
         description,
         weight_kg: weight ? Number(weight) : null,
         photos,
+        length_cm: lengthCm ? Number(lengthCm) : null,
+        width_cm: widthCm ? Number(widthCm) : null,
+        height_cm: heightCm ? Number(heightCm) : null,
+        declared_value: declaredValue ? Number(declaredValue) : null,
+        distance_km: km,
+        pricing_rule_id: selectedRule.id.startsWith('fallback-') ? null : selectedRule.id,
         origin: originGeo,
         destination: destGeo,
         origin_province: origin.province,
@@ -132,8 +170,8 @@ export default function NewShipment() {
         destination_exact: `${dest.address}, ${dest.locality}, ${dest.province}`,
         vehicle_required: cfg.categories[category].vehicle_required,
         start_price: Number(price),
-        suggested_price: suggested,
-        commission_pct: cfg.categories[category].commission_pct,
+        suggested_price: null,
+        commission_pct: selectedRule.commission_pct,
         auction_ends_at: ends,
       });
       if (error) throw error;
@@ -145,27 +183,87 @@ export default function NewShipment() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Publicar un flete</h1>
+      <h1 className="text-2xl font-bold mb-4">Publicar carga</h1>
       {!userId && <Alert>Iniciá sesión para publicar. <button onClick={signIn} className="font-semibold underline">Ingresar</button></Alert>}
 
       <form onSubmit={submit} className="space-y-5">
         <div>
-          <span className="block text-sm font-medium text-gray-700 mb-2">Tipo de flete (define comisión y vehículo)</span>
+          <span className="block text-sm font-medium text-gray-700 mb-2">¿Qué tipo de carga querés enviar?</span>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {CATS.map(([k, label, comm]) => (
+            {GROUPS.map((group) => (
+              <button type="button" key={group} onClick={() => setLoadGroup(group)}
+                className={`aspect-square border rounded-xl p-4 flex flex-col items-center justify-center text-center transition ${loadGroup === group ? 'border-amber-500 ring-2 ring-amber-400 bg-white' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                <div className="text-2xl mb-2">{group === 'small' ? '📦' : group === 'medium' ? '🛻' : '🏗️'}</div>
+                <div className="font-semibold text-sm">{LOAD_GROUP_LABELS[group]}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {loadGroup === 'small' && (
+          <div>
+            <span className="block text-sm font-medium text-gray-700 mb-2">Elegí una opción</span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {groupRules.map((rule) => (
+                <button type="button" key={rule.code} onClick={() => setLoadOption(rule.code)}
+                  className={`aspect-square border rounded-xl p-3 flex flex-col items-center justify-center text-center transition ${loadOption === rule.code ? 'border-amber-500 ring-2 ring-amber-400 bg-white' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                  <div className="text-2xl mb-1">{rule.code === 'sobre' ? '✉️' : rule.code === 'manual' ? '⚖️' : '📦'}</div>
+                  <div className="font-semibold text-xs leading-tight">{rule.label}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {loadGroup === 'medium' && (
+          <div>
+            <span className="block text-sm font-medium text-gray-700 mb-2">Medidas de la carga (en cm)</span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="aspect-square border rounded-xl p-4 bg-white flex flex-col justify-center">
+                <label className="text-xs text-gray-500 mb-1">Largo</label>
+                <input className="w-full border rounded-lg px-3 py-2 text-center font-semibold" type="number" min="0" value={lengthCm} onChange={(e) => setLengthCm(e.target.value)} placeholder="1200" />
+                <span className="text-xs text-gray-400 text-center mt-1">cm</span>
+              </div>
+              <div className="aspect-square border rounded-xl p-4 bg-white flex flex-col justify-center">
+                <label className="text-xs text-gray-500 mb-1">Ancho</label>
+                <input className="w-full border rounded-lg px-3 py-2 text-center font-semibold" type="number" min="0" value={widthCm} onChange={(e) => setWidthCm(e.target.value)} placeholder="1000" />
+                <span className="text-xs text-gray-400 text-center mt-1">cm</span>
+              </div>
+              <div className="aspect-square border rounded-xl p-4 bg-white flex flex-col justify-center">
+                <label className="text-xs text-gray-500 mb-1">Alto</label>
+                <input className="w-full border rounded-lg px-3 py-2 text-center font-semibold" type="number" min="0" value={heightCm} onChange={(e) => setHeightCm(e.target.value)} placeholder="1000" />
+                <span className="text-xs text-gray-400 text-center mt-1">cm</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {loadGroup === 'large' && (
+          <Field label="Descripción de la carga grande" hint="Indicá peso aproximado, medidas, tipo de máquina/vehículo, etc.">
+            <textarea className={inputCls} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ej: Tractor agrícola de 3 toneladas, 4m de largo, 2m de ancho…" />
+          </Field>
+        )}
+
+        <div>
+          <span className="block text-sm font-medium text-gray-700 mb-2">Tipo de vehículo que necesitás</span>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {CATS.map(([k, label]) => (
               <button type="button" key={k} onClick={() => setCategory(k as Category)}
-                className={`border rounded-xl p-3 text-left transition ${category === k ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-400' : 'border-gray-200 bg-white hover:border-gray-300'}`}
-              >
+                className={`border rounded-xl p-3 text-left transition ${category === k ? 'border-amber-500 bg-white ring-2 ring-amber-400' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
                 <div className="font-semibold text-sm">{label}</div>
-                <div className="text-xs text-gray-500 mt-1">Comisión {comm} · ref. ${cfg.categories[k as Category].tariff_per_km}/km</div>
               </button>
             ))}
           </div>
         </div>
 
         <Field label="Título"><input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej: Caja de repuestos a Rafaela" /></Field>
-        <Field label="Descripción"><textarea className={inputCls} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Detalles de la carga, embalaje, instrucciones de entrega…" /></Field>
-        <Field label="Peso (kg, opcional)"><input className={inputCls} type="number" min="0" value={weight} onChange={(e) => setWeight(e.target.value)} /></Field>
+        {loadGroup !== 'large' && (
+          <Field label="Descripción"><textarea className={inputCls} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Detalles de la carga, embalaje, instrucciones de entrega…" /></Field>
+        )}
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Peso (kg)"><input className={inputCls} type="number" min="0" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="Ej. 25" /></Field>
+          <Field label="Valor declarado (ARS)" hint="Obligatorio para seguro de la carga."><input className={inputCls} type="number" min="0" value={declaredValue} onChange={(e) => setDeclaredValue(e.target.value)} placeholder="Ej. 150000" /></Field>
+        </div>
         <Field label="Fotos de la carga (hasta 5)">
           <input type="file" accept="image/*" multiple onChange={(e) => onUpload(e.target.files)} className="text-sm" />
         </Field>
@@ -184,16 +282,10 @@ export default function NewShipment() {
 
         <div className="bg-white rounded-xl border p-4 space-y-3">
           <h3 className="font-semibold">¿Quién recibe?</h3>
-          <Field label="Alias del receptor (@usuario)" hint="Obligatorio. El receptor debe tener un alias único en CARG-AR."
-          >
+          <Field label="Alias del receptor (@usuario)" hint="Obligatorio. El receptor debe tener un alias único en CARG-AR.">
             <div className="flex items-center gap-2">
               <span className="bg-gray-100 border border-r-0 border-gray-300 rounded-l-lg px-3 py-2 text-sm text-gray-600">@</span>
-              <input
-                className={inputCls + ' rounded-l-none'}
-                value={receiverAlias}
-                onChange={(e) => { setReceiverAlias(e.target.value); setReceiverError(''); }}
-                placeholder="alias del receptor"
-              />
+              <input className={inputCls + ' rounded-l-none'} value={receiverAlias} onChange={(e) => { setReceiverAlias(e.target.value); setReceiverError(''); }} placeholder="alias del receptor" />
             </div>
           </Field>
           {receiverError && <p className="text-xs text-red-600">{receiverError}</p>}
@@ -211,17 +303,14 @@ export default function NewShipment() {
           height={320}
           onPick={pickMap}
         />
-        <div className="bg-white border rounded-xl p-4 text-sm">
-          Distancia estimada: <b>{km} km</b> · Precio referencial sugerido: <b>${suggested.toLocaleString('es-AR')}</b>
-        </div>
 
-        <Field label="Precio inicial que podés pagar (los transportistas pujan)" hint={`Comisión de la plataforma: ${cfg.categories[category].commission_pct}% sobre el valor total`}>
-          <input className={inputCls} type="number" min="1" value={price} onChange={(e) => setPrice(e.target.value)} placeholder={String(suggested)} />
+        <Field label="Precio inicial que podés pagar">
+          <input className={inputCls} type="number" min="1" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Ingresá tu precio" />
         </Field>
 
         {error && <Alert kind="error">{error}</Alert>}
         <button disabled={saving} className="bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-gray-900 font-bold px-6 py-3 rounded-xl w-full sm:w-auto">
-          {saving ? 'Publicando…' : `Publicar y abrir subasta (${cfg.auction_minutes} min)`}
+          {saving ? 'Publicando…' : `Publicar carga`}
         </button>
       </form>
     </div>

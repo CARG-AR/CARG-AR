@@ -25,10 +25,8 @@ export function Layout() {
           </Link>
           <nav className="flex items-center gap-1 flex-1">
             {link('/', 'Fletes')}
-            {link('/nuevo', 'Publicar')}
             {link('/mis-fletes', 'Mis fletes')}
-            {link('/transportista', 'Soy transportista')}
-            {profile?.is_admin && link('/admin', 'Admin')}
+            {profile?.is_admin && link('/admin', 'Panel de control')}
           </nav>
           {loading ? null : userId ? (
             <div className="flex items-center gap-2">
