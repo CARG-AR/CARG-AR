@@ -6,6 +6,7 @@ import { StatusChip, UserChip, Countdown, inputCls, Alert } from '../components/
 import { MapView, categoryColor, type MapMarker } from '../components/MapView';
 import { useAuth } from '../lib/useAuth';
 import { fetchProvinces, fetchLocalities, type Province, type Locality } from '../lib/geo';
+import LandingPage from './LandingPage';
 
 const CATS = [
   ['paqueteria', 'Paquetería (sobre/bulto)'],
@@ -14,7 +15,7 @@ const CATS = [
 ] as const;
 
 export default function Feed() {
-  const { userId, signIn } = useAuth();
+  const { userId } = useAuth();
   const [rows, setRows] = useState<Shipment[]>([]);
   const [error, setError] = useState('');
   const [view, setView] = useState<'lista' | 'mapa'>('lista');
@@ -59,15 +60,12 @@ export default function Feed() {
       label: `<b>${s.title}</b><br/>Desde: ${s.origin_locality}, ${s.origin_province}<br/>${money(s.start_price)} · <a href="/flete/${s.id}">Ver flete</a>`,
     }));
 
+  if (!userId) return <LandingPage />;
+
   return (
     <div>
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <h1 className="text-2xl font-bold mr-auto">Fletes en subasta</h1>
-        {!userId && (
-          <button onClick={signIn} className="text-sm font-semibold text-amber-600 hover:underline">
-            Ingresá para pujar o publicar
-          </button>
-        )}
         <Link to="/nuevo" className="bg-gray-900 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-gray-700">
           + Publicar flete
         </Link>
@@ -97,10 +95,6 @@ export default function Feed() {
       </div>
 
       {error && <Alert kind="error">{error}</Alert>}
-
-      {!userId ? (
-        <Alert>Iniciá sesión para ver el detalle, pujar y publicar. El acceso es solo para usuarios registrados.</Alert>
-      ) : null}
 
       {view === 'lista' ? (
         <div className="grid gap-3">
