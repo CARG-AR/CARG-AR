@@ -1,22 +1,36 @@
 import { useEffect, useState } from 'react';
-import { getCarrierQueue, getDisputes, setCarrierStatus } from '../lib/db';
+import { getAdminMetrics, getCarrierQueue, getDisputes, getLoadRules, saveLoadRule, setCarrierStatus } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/useAuth';
 import { Alert } from '../components/ui';
-import type { Dispute } from '../lib/types';
+import { LOAD_GROUP_LABELS, type Dispute, type LoadGroup, type LoadRule } from '../lib/types';
 
 export default function Admin() {
   const { userId, profile, signIn } = useAuth();
   const [queue, setQueue] = useState<any[]>([]);
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [reports, setReports] = useState<any[]>([]);
+  const [metrics, setMetrics] = useState<any>(null);
+  const [rules, setRules] = useState<LoadRule[]>([]);
   const [error, setError] = useState('');
 
   async function load() {
-    setQueue(await getCarrierQueue());
-    setDisputes(await getDisputes());
-    const { data } = await supabase.from('reports').select('*').order('created_at', { ascending: false });
-    setReports(data || []);
+    try {
+      const [carrierQueue, disputeRows, ruleRows, metricRows] = await Promise.all([
+        getCarrierQueue(),
+        getDisputes(),
+        getLoadRules(),
+        getAdminMetrics(),
+      ]);
+      setQueue(carrierQueue);
+      setDisputes(disputeRows);
+      setRules(ruleRows);
+      setMetrics(metricRows);
+      const { data } = await supabase.from('reports').select('*').order('created_at', { ascending: false });
+      setReports(data || []);
+    } catch (e: any) {
+      setError(e.message);
+    }
   }
   useEffect(() => { if (userId) load(); }, [userId]);
 
@@ -45,6 +59,67 @@ export default function Admin() {
     <div className="space-y-8">
       <h1 className="text-2xl font-bold">Panel de administración</h1>
       {error && <Alert kind="error">{error}</Alert>}
+
+      {metrics && (
+        <section className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+          {[
+            ['Usuarios', metrics.users],
+            ['Transportistas', metrics.carriers],
+            ['Verificados', metrics.verifiedCarriers],
+            ['Pendientes', metrics.pendingCarriers],
+            ['Publicaciones hoy', metrics.publicationsToday],
+            ['Publicaciones históricas', metrics.publicationsTotal],
+          ].map(([label, value]) => (
+            <div key={label as string} className="bg-white rounded-xl border p-4">
+              <div className="text-2xl font-black text-gray-900">{value}</div>
+              <div className="text-xs text-gray-500">{label}</div>
+            </div>
+          ))}
+        </section>
+      )}
+
+      <section className="bg-white rounded-xl border p-5">
+        <h2 className="font-semibold mb-3">Publicaciones por tipo de carga</h2>
+        <div className="grid sm:grid-cols-3 gap-3">
+          {(['small', 'medium', 'large'] as LoadGroup[]).map((group) => (
+            <div key={group} className="rounded-lg bg-gray-50 p-3">
+              <div className="text-sm text-gray-500">{LOAD_GROUP_LABELS[group]}</div>
+              <div className="text-xl font-bold">{metrics?.publicationsByGroup[group] || 0}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="bg-white rounded-xl border p-5">
+        <h2 className="font-semibold mb-3">Reglas de cargas y tarifas</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="text-left text-gray-500 border-b"><th className="py-2">Tipo</th><th>Opción</th><th>0–30 km</th><th>30–100 km</th><th>100–250 km</th><th>Comisión</th><th /></tr></thead>
+            <tbody>
+              {rules.map((rule) => (
+                <tr key={rule.id} className="border-b last:border-0">
+                  <td className="py-2">{LOAD_GROUP_LABELS[rule.group]}</td>
+                  <td>{rule.label}</td>
+                  {(['tariff_0_30', 'tariff_30_100', 'tariff_100_250', 'commission_pct'] as const).map((field) => (
+                    <td key={field}>
+                      <input
+                        className="w-24 border rounded px-2 py-1"
+                        type="number"
+                        value={rule[field] ?? ''}
+                        disabled={rule.manual && field.startsWith('tariff')}
+                        onChange={(e) => setRules((current) => current.map((item) => item.id === rule.id ? { ...item, [field]: e.target.value === '' ? null : Number(e.target.value) } : item))}
+                      />
+                      {field === 'commission_pct' ? '%' : ''}
+                    </td>
+                  ))}
+                  <td><button onClick={async () => { const { error: saveError } = await saveLoadRule({ ...rule, group_code: rule.group } as any); if (saveError) setError(saveError.message); }} className="bg-gray-900 text-white text-xs px-3 py-1.5 rounded-lg">Guardar</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-gray-500 mt-3">Las opciones manuales se resaltan en amarillo en el formulario de publicación y permiten ingresar el precio directamente.</p>
+      </section>
 
       <section className="bg-white rounded-xl border p-5">
         <h2 className="font-semibold mb-3">Verificación de transportistas</h2>

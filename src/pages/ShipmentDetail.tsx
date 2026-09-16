@@ -207,7 +207,9 @@ export default function ShipmentDetail() {
           <div><div className="text-gray-500 text-xs">Origen</div>{s.origin?.label}</div>
           <div><div className="text-gray-500 text-xs">Destino</div>{s.destination?.label}</div>
           <div><div className="text-gray-500 text-xs">Peso</div>{s.weight_kg ? `${s.weight_kg} kg` : '—'}</div>
-          <div><div className="text-gray-500 text-xs">Categoría / vehículo</div>{s.category} · {VEHICLE_TYPES[s.vehicle_required] || s.vehicle_required}</div>
+          <div><div className="text-gray-500 text-xs">Carga / vehículo</div>{s.load_option || s.category} · {VEHICLE_TYPES[s.vehicle_required] || s.vehicle_required}</div>
+          <div><div className="text-gray-500 text-xs">Distancia / medidas</div>{s.distance_km ? `${s.distance_km} km` : '—'} · {s.length_cm && s.width_cm && s.height_cm ? `${s.length_cm}×${s.width_cm}×${s.height_cm} cm` : '—'}</div>
+          <div><div className="text-gray-500 text-xs">Valor declarado</div>{s.declared_value ? money(s.declared_value) : '—'}</div>
         </div>
         <div className="flex flex-wrap items-center gap-4 mt-4">
           <span className="text-2xl font-bold">{money(s.total_value || s.start_price)}</span>

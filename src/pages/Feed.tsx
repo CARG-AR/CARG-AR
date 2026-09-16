@@ -112,6 +112,11 @@ export default function Feed() {
                   📍 {s.origin_locality}, {s.origin_province} → {s.destination_locality}, {s.destination_province}
                   {s.weight_kg ? ` · ${s.weight_kg} kg` : ''}
                 </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {s.load_option || s.category}
+                  {s.distance_km ? ` · ${s.distance_km} km` : ''}
+                  {s.pricing_mode === 'manual' ? ' · Precio manual' : ''}
+                </div>
                 <div className="mt-1">
                   <UserChip name={s.dispatcher?.username || s.dispatcher?.full_name || ''} reputation={s.reputation} />
                 </div>

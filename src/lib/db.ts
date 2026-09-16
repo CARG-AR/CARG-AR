@@ -1,9 +1,38 @@
 import { supabase } from './supabase';
-import { FALLBACK_CONFIG, type AppConfig, type Bid, type Delivery, type Dispute, type Profile, type Review, type Shipment, type Transaction, type Vehicle, type CarrierProfile, type Reputation, type GeoPoint } from './types';
+import { FALLBACK_CONFIG, FALLBACK_LOAD_RULES, type AdminMetrics, type AppConfig, type Bid, type Delivery, type Dispute, type LoadRule, type LoadRuleDraft, type Profile, type Review, type Shipment, type Transaction, type Vehicle, type CarrierProfile, type Reputation, type GeoPoint } from './types';
 
 export async function getConfig(): Promise<AppConfig> {
   const { data } = await supabase.from('settings').select('data').eq('id', 1).maybeSingle();
   return (data?.data as AppConfig) || FALLBACK_CONFIG;
+}
+
+export async function getLoadRules(): Promise<LoadRule[]> {
+  const { data, error } = await supabase.from('load_rules').select('*').eq('active', true).order('group_code').order('sort_order');
+  if (error || !data?.length) return FALLBACK_LOAD_RULES;
+  return (data as any[]).map((row) => ({ ...row, group: row.group_code })) as LoadRule[];
+}
+
+export async function saveLoadRule(rule: LoadRuleDraft) {
+  const { id, group, ...rest } = rule as LoadRuleDraft & { group?: string };
+  return supabase.from('load_rules').upsert({ ...rest, id, group_code: group || (rule as any).group_code }).select('*').single();
+}
+
+export async function getAdminMetrics(): Promise<AdminMetrics> {
+  const [{ count: users }, { count: carriers }, { count: verifiedCarriers }, { count: pendingCarriers }, { count: publicationsTotal }, { count: publicationsToday }] = await Promise.all([
+    supabase.from('profiles').select('*', { count: 'exact', head: true }),
+    supabase.from('carrier_profiles').select('*', { count: 'exact', head: true }),
+    supabase.from('carrier_profiles').select('*', { count: 'exact', head: true }).eq('status', 'verified'),
+    supabase.from('carrier_profiles').select('*', { count: 'exact', head: true }).in('status', ['pending', 'in_review']),
+    supabase.from('shipments').select('*', { count: 'exact', head: true }),
+    supabase.from('shipments').select('*', { count: 'exact', head: true }).gte('created_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString()),
+  ]);
+  const { data: grouped } = await supabase.from('shipments').select('load_group');
+  const publicationsByGroup = (grouped || []).reduce<Record<string, number>>((acc, row: any) => {
+    const group = row.load_group || 'legacy';
+    acc[group] = (acc[group] || 0) + 1;
+    return acc;
+  }, {});
+  return { users: users || 0, carriers: carriers || 0, verifiedCarriers: verifiedCarriers || 0, pendingCarriers: pendingCarriers || 0, publicationsToday: publicationsToday || 0, publicationsTotal: publicationsTotal || 0, publicationsByGroup };
 }
 
 export async function getProfile(id: string): Promise<Profile | null> {
