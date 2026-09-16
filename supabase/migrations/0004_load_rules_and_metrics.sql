@@ -38,8 +38,8 @@ create policy "load rules admin update" on public.load_rules for update to authe
 insert into public.load_rules (group_code, code, label, weight_min_kg, weight_max_kg, dimension_min_cm, dimension_max_cm, requires_declared_value, tariff_0_30, tariff_30_100, tariff_100_250, commission_pct, manual, sort_order)
 values
   ('small', 'sobre', 'Sobre', 0, 1, 0, 30, false, 18000, 20000, 25000, 6, false, 1),
-  ('small', 'bulto_1', 'Bulto 1', 1, 25, 30, 32, true, 20000, 23000, 30000, 6, false, 2),
-  ('small', 'bulto_2', 'Bulto 2', 25, 50, 30, 50, true, 22000, 25000, 32000, 6, false, 3),
+  ('small', 'bulto_1', 'Bulto pequeño', 1, 25, 30, 32, true, 20000, 23000, 30000, 6, false, 2),
+  ('small', 'bulto_2', 'Bulto mediano', 25, 50, 30, 50, true, 22000, 25000, 32000, 6, false, 3),
   ('small', 'manual', 'Bulto manual', null, null, null, null, true, null, null, null, 7, true, 4),
   ('medium', 'pallet', 'Pallets, peso y medidas', null, null, 100, 120, true, 75000, 120000, 150000, 9, false, 1),
   ('medium', 'manual', 'Carga manual', null, null, null, null, true, null, null, null, 11, true, 2),
